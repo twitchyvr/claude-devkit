@@ -2,9 +2,29 @@
 
 > AI-powered developer tools built on [Claude Code](https://claude.ai/claude-code) CLI.
 
-Four terminal tools that bring AI into your daily git workflow — code reviews, project analysis, commit journaling, and prompt integration. No API keys to manage, no servers to run. Just Claude Code + your terminal.
+Five terminal tools that bring AI into your daily workflow — command lookup, code reviews, project analysis, commit journaling, and prompt integration. No API keys to manage, no servers to run. Just Claude Code + your terminal.
 
 ## Tools
+
+### `??` / `ask-ai` — AI Command Lookup
+
+Ask a question in plain English, get the exact terminal command. Context-aware — detects your project stack and gives specific answers.
+
+```bash
+?? how do I find files larger than 100MB
+?? convert this mp4 to gif at 10fps
+?? what's using port 3000
+?? show git commits from last week by author
+?? -r list all docker containers        # run immediately
+```
+
+```
+  fd -S +100M -t f
+
+  copied to clipboard. paste or press !! to run last.
+```
+
+Detects Node, Python, Rust, Go, Docker, and git context automatically. `?? run tests` gives you `npm test` in a Node project and `python -m pytest` in a Python project.
 
 ### `ai-review` — Instant AI Code Review
 
@@ -16,8 +36,6 @@ ai-review HEAD~1       # review last commit
 ai-review main         # review entire branch vs main
 ai-review --full       # all uncommitted changes
 ```
-
-**Example output:**
 
 ```
 ── AI Code Review ──────────────────────────
@@ -59,8 +77,6 @@ devlog-hook --install          # install in current repo
 devlog-hook --install-global   # install for ALL repos
 ```
 
-**DEVLOG.md output:**
-
 ```markdown
 # Development Log
 
@@ -92,6 +108,10 @@ Then add to your `~/.zshrc` (or `~/.bashrc`):
 
 ```bash
 export PATH="$HOME/.claude-devkit/bin:$PATH"
+
+# Optional aliases for the ?? shortcut
+alias '??'='ask-ai'
+alias '?'='ask-ai'
 ```
 
 ### Starship Integration
@@ -113,9 +133,11 @@ shell = ["zsh", "-c"]
 - `git` (any recent version)
 - `zsh` or `bash`
 
-**Optional** (enhance `project-brief` output):
-- [`eza`](https://github.com/eza-community/eza) — better directory trees
-- [`tokei`](https://github.com/XAManifest/tokei) — code statistics
+**Optional** (enhance output of various tools):
+- [`eza`](https://github.com/eza-community/eza) — better directory trees in `project-brief`
+- [`tokei`](https://github.com/XAManifest/tokei) — code statistics in `project-brief`
+- [`bat`](https://github.com/sharkdp/bat) — syntax highlighting
+- [`fd`](https://github.com/sharkdp/fd) — modern find (preferred by `??`)
 
 ## Configuration
 
@@ -123,7 +145,7 @@ Set environment variables to customize behavior:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLAUDE_DEVKIT_MODEL` | `haiku` | Model for `devlog-hook` (fast, cheap) |
+| `CLAUDE_DEVKIT_MODEL` | `haiku` | Model for `??` and `devlog-hook` (fast, cheap) |
 | `CLAUDE_DEVKIT_REVIEW_MODEL` | `sonnet` | Model for `ai-review` and `project-brief` (smarter) |
 
 Example:
@@ -137,6 +159,7 @@ CLAUDE_DEVKIT_REVIEW_MODEL=opus ai-review main
 
 All tools use `claude -p` (print mode) to run Claude Code non-interactively. No API keys are needed — they use your existing Claude Code authentication.
 
+- **`??` / `ask-ai`** detects your project context (package files, git state, OS) and asks Claude for the exact command. Uses Haiku for speed — typical response in 1-2 seconds. Copies to clipboard automatically.
 - **`devlog-hook`** runs as a git `post-commit` hook with `&` (background) so your commit returns instantly. The AI summary appears in DEVLOG.md a few seconds later.
 - **`ai-review`** sends the raw git diff as context and gets a structured review back. Uses Sonnet by default for stronger reasoning about code.
 - **`project-brief`** gathers context from package files, README, git history, directory structure, and code statistics, then asks Claude to synthesize it into a structured brief.
@@ -144,7 +167,7 @@ All tools use `claude -p` (print mode) to run Claude Code non-interactively. No 
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Issues, feature requests, and PRs are all welcome.
 
 ## License
 

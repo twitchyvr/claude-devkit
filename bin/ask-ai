@@ -1,0 +1,116 @@
+#!/usr/bin/env zsh
+#
+# ?? — AI-powered command lookup
+#
+# Ask a question in plain English, get the exact terminal command.
+# Context-aware: reads your current directory to give stack-specific answers.
+#
+# Usage:
+#   ?? how do I find files larger than 100MB
+#   ?? convert mp4 to gif at 10fps
+#   ?? what's using port 3000
+#   ?? disk usage by folder sorted
+#   ?? -r how do I find large files    # run the command immediately
+#
+
+set -uo pipefail
+
+CLAUDE_MODEL="${CLAUDE_DEVKIT_MODEL:-haiku}"
+
+# Colors
+G='\e[0;32m'
+D='\e[2m'
+C='\e[0;36m'
+Y='\e[1;33m'
+B='\e[1m'
+N='\e[0m'
+
+# Detect project context (fast — no API calls)
+detect_context() {
+    local ctx="OS: macOS ($(uname -m)). Shell: zsh."
+
+    # Detect stack from files in current directory
+    [[ -f "package.json" ]] && ctx="$ctx Node.js project (package.json present)."
+    [[ -f "pyproject.toml" ]] || [[ -f "requirements.txt" ]] && ctx="$ctx Python project."
+    [[ -f "Cargo.toml" ]] && ctx="$ctx Rust project."
+    [[ -f "go.mod" ]] && ctx="$ctx Go project."
+    [[ -f "Makefile" ]] && ctx="$ctx Makefile present."
+    [[ -f "docker-compose.yml" ]] || [[ -f "docker-compose.yaml" ]] && ctx="$ctx Docker Compose project."
+    [[ -f "Dockerfile" ]] && ctx="$ctx Has Dockerfile."
+    [[ -d ".git" ]] && ctx="$ctx Git repo (branch: $(git branch --show-current 2>/dev/null))."
+    [[ -d ".venv" ]] && ctx="$ctx Python venv active."
+    [[ -d "node_modules" ]] && ctx="$ctx node_modules present."
+
+    echo "$ctx"
+}
+
+main() {
+    local run_mode=false
+    local query=""
+
+    # Check for -r flag (run immediately)
+    if [[ "${1:-}" == "-r" ]]; then
+        run_mode=true
+        shift
+    fi
+
+    query="$*"
+
+    if [[ -z "$query" ]]; then
+        echo -e "${C}${B}??${N} — Ask AI anything about the command line"
+        echo ""
+        echo -e "  ${G}?? ${D}how do I find files larger than 100MB${N}"
+        echo -e "  ${G}?? ${D}what's using port 3000${N}"
+        echo -e "  ${G}?? ${D}compress this directory${N}"
+        echo -e "  ${G}?? -r ${D}list all docker containers${N}  ${D}(run immediately)${N}"
+        echo ""
+        return 0
+    fi
+
+    local context
+    context=$(detect_context)
+
+    local prompt="You are a command-line expert. The user needs a terminal command.
+
+Context: $context
+Working directory: $PWD
+
+Question: $query
+
+Rules:
+- Reply with ONLY the raw command(s) — no explanation, no markdown, no backticks, no code fences, no \`\`\` blocks
+- If multiple commands are needed, separate with && or put each on its own line
+- Use the tools available on macOS with Homebrew (the user has: eza, bat, fd, fzf, ripgrep, dust, duf, jq, fx, tokei, hyperfine)
+- Prefer modern tools over legacy ones (fd over find, rg over grep, eza over ls)
+- If the question is about this specific project, use the detected context
+- If you truly cannot answer with a command, say so in one short sentence"
+
+    local result
+    result=$(claude -p "$prompt" --model "$CLAUDE_MODEL" --max-turns 1 2>/dev/null \
+        | sed '/^<system-reminder>/,/<\/system-reminder>/d' \
+        | sed 's/^```[a-z]*$//' \
+        | sed 's/^```$//' \
+        | sed 's/^[[:space:]]*//' \
+        | sed '/^$/d')
+
+    if [[ -z "$result" ]]; then
+        echo -e "${Y}Couldn't get an answer. Is Claude Code authenticated?${N}"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${D}  $result${N}"
+    echo ""
+
+    if $run_mode; then
+        echo -e "${D}  running...${N}"
+        echo ""
+        eval "$result"
+    else
+        # Copy to clipboard and offer to run
+        echo -n "$result" | pbcopy
+        echo -e "${D}  copied to clipboard. paste or press ${N}${G}!! ${N}${D}to run last.${N}"
+    fi
+}
+
+main "$@"

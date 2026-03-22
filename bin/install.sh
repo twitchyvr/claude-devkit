@@ -47,7 +47,7 @@ fi
 
 # Link binaries
 mkdir -p "$BIN_DIR"
-for tool in devlog-hook ai-review project-brief claude-status; do
+for tool in devlog-hook ai-review project-brief claude-status ask-ai; do
     chmod +x "$INSTALL_DIR/bin/$tool"
     ln -sf "$INSTALL_DIR/bin/$tool" "$BIN_DIR/$tool"
 done
@@ -61,10 +61,14 @@ fi
 
 echo ""
 echo "${GREEN}${BOLD}Installed!${NC} Available commands:"
+echo "  ${BOLD}ask-ai${NC} / ${BOLD}??${NC}    — AI command lookup (plain English → terminal command)"
 echo "  ${BOLD}ai-review${NC}       — AI-powered code review from git diff"
 echo "  ${BOLD}project-brief${NC}   — AI-generated project overview"
 echo "  ${BOLD}devlog-hook${NC}     — Auto-summarize commits to DEVLOG.md"
 echo "  ${BOLD}claude-status${NC}   — Starship prompt module for Claude Code"
+echo ""
+echo "${DIM}Add to ~/.zshrc for the ?? shortcut:${NC}"
+echo "  alias '??'='ask-ai'"
 echo ""
 echo "${DIM}Run 'devlog-hook --install-global' to enable auto-journaling for all repos.${NC}"
 echo "${DIM}See ${REPO_URL} for Starship integration and configuration.${NC}"
