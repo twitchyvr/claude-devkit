@@ -1,0 +1,187 @@
+#!/usr/bin/env zsh
+#
+# project-brief — AI-generated project overview
+#
+# Point it at any repo and get a structured overview:
+# what it does, tech stack, how to run it, key files.
+#
+# Prerequisites: Claude Code CLI (`claude`) installed and authenticated.
+#
+# Usage:
+#   project-brief                    # current directory
+#   project-brief ~/code/myapp       # specific project
+#   project-brief --save             # also save to .project-brief.md
+#
+
+set -uo pipefail
+setopt nullglob 2>/dev/null
+
+CLAUDE_MODEL="${CLAUDE_DEVKIT_REVIEW_MODEL:-sonnet}"
+
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+gather_context() {
+    local dir="${1:-.}"
+    cd "$dir"
+
+    echo "=== PROJECT CONTEXT ==="
+    echo ""
+    echo "Directory: $(basename "$PWD")"
+    echo "Path: $PWD"
+    echo ""
+
+    # Package/config files (detect tech stack)
+    for f in package.json pyproject.toml Cargo.toml go.mod build.gradle pom.xml CMakeLists.txt Makefile; do
+        if [[ -f "$f" ]]; then
+            echo "--- $f ---"
+            head -30 "$f"
+            echo ""
+        fi
+    done
+
+    # Glob patterns separately (nullglob handles missing)
+    for f in *.csproj *.sln; do
+        if [[ -f "$f" ]]; then
+            echo "--- $f ---"
+            head -30 "$f"
+            echo ""
+        fi
+    done
+
+    # README
+    if [[ -f "README.md" ]]; then
+        echo "--- README.md (first 50 lines) ---"
+        head -50 README.md
+        echo ""
+    fi
+
+    # CLAUDE.md
+    if [[ -f "CLAUDE.md" ]]; then
+        echo "--- CLAUDE.md (first 30 lines) ---"
+        head -30 CLAUDE.md
+        echo ""
+    fi
+
+    # Docker
+    for f in Dockerfile docker-compose.yml docker-compose.yaml .devcontainer/devcontainer.json; do
+        if [[ -f "$f" ]]; then
+            echo "--- $f ---"
+            head -20 "$f"
+            echo ""
+        fi
+    done
+
+    # Directory structure
+    echo "--- Directory structure ---"
+    if command -v eza &>/dev/null; then
+        eza --tree --level=2 --git-ignore --icons \
+            -I "node_modules|.git|__pycache__|.venv|target|dist|build|.next" 2>/dev/null
+    elif command -v tree &>/dev/null; then
+        tree -L 2 -I "node_modules|.git|__pycache__|.venv|target" 2>/dev/null
+    else
+        find . -maxdepth 2 -not -path '*/node_modules/*' -not -path '*/.git/*' | head -50
+    fi
+    echo ""
+
+    # Git info
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        echo "--- Git info ---"
+        echo "Branch: $(git branch --show-current 2>/dev/null || echo 'N/A')"
+        echo "Remote: $(git remote get-url origin 2>/dev/null || echo 'none')"
+        echo "Last 5 commits:"
+        git log --oneline -5 2>/dev/null || echo "no commits"
+        echo ""
+    fi
+
+    # File counts by type
+    echo "--- File statistics ---"
+    if command -v tokei &>/dev/null; then
+        tokei --compact 2>/dev/null
+    elif command -v cloc &>/dev/null; then
+        cloc --quiet . 2>/dev/null
+    else
+        echo "(install tokei or cloc for file statistics)"
+    fi
+}
+
+main() {
+    local target_dir="."
+    local save_mode=false
+
+    for arg in "$@"; do
+        case "$arg" in
+            --save) save_mode=true ;;
+            --help|-h) head -16 "$0" | tail -12; exit 0 ;;
+            *) target_dir="$arg" ;;
+        esac
+    done
+
+    if [[ ! -d "$target_dir" ]]; then
+        echo "Error: '$target_dir' is not a directory"
+        exit 1
+    fi
+
+    echo "${CYAN}${BOLD}── Project Brief ───────────────────────────${NC}"
+    echo "${DIM}Analyzing $(basename "$target_dir")...${NC}"
+    echo ""
+
+    local context
+    context=$(gather_context "$target_dir" 2>&1)
+
+    local prompt="You are a senior developer onboarding onto a new project. Given the project context below, generate a concise project brief.
+
+Format:
+
+## [Project Name]
+
+**What it does:** One clear sentence.
+
+**Tech stack:**
+- Frontend: [if applicable]
+- Backend: [if applicable]
+- Database: [if applicable]
+- Infrastructure: [Docker, CI/CD, etc.]
+
+**Quick start:**
+\`\`\`bash
+# The exact commands to get this running locally
+\`\`\`
+
+**Key files:**
+| File | Purpose |
+|------|---------|
+| ... | ... |
+
+**Architecture notes:** [2-3 sentences on how the code is organized]
+
+**Current status:** [based on recent commits and branch state]
+
+Rules:
+- Be specific — use actual file names, commands, and versions from the context
+- If you can't determine something, say 'unclear from context' rather than guessing
+- Keep the entire brief under 40 lines
+
+PROJECT CONTEXT:
+$context"
+
+    local result
+    result=$(claude -p "$prompt" --model "$CLAUDE_MODEL" --max-turns 1 2>/dev/null \
+        | sed '/^<system-reminder>/,/<\/system-reminder>/d')
+
+    if $save_mode; then
+        echo "$result" > "$(cd "$target_dir" && pwd)/.project-brief.md"
+        echo "$result"
+        echo ""
+        echo "${DIM}Saved to $(cd "$target_dir" && pwd)/.project-brief.md${NC}"
+    else
+        echo "$result"
+    fi
+
+    echo ""
+    echo "${DIM}── Brief complete ──────────────────────────${NC}"
+}
+
+main "$@"

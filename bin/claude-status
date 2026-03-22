@@ -1,0 +1,39 @@
+#!/usr/bin/env zsh
+#
+# claude-status — Starship custom module data provider
+#
+# Outputs a short string for Starship to display:
+#   - Active Claude Code session indicator (◆)
+#   - Number of active MCP servers
+#
+# Designed to run fast (<100ms) — no API calls, just file checks.
+#
+# Usage in starship.toml:
+#   [custom.claude]
+#   command = "claude-status"
+#   when = '[ -n "$CLAUDE_CODE_SESSION_ID" ] || [ -n "$CLAUDE_SESSION_ID" ]'
+#   format = "[$output]($style) "
+#   style = "bold #cc785c"
+#
+
+if [[ -n "${CLAUDE_CODE_SESSION_ID:-}" ]] || [[ -n "${CLAUDE_SESSION_ID:-}" ]]; then
+    mcp_count=0
+    mcp_file="$HOME/.claude.json"
+
+    if [[ -f "$mcp_file" ]]; then
+        mcp_count=$(python3 -c "
+import json
+try:
+    with open('$mcp_file') as f:
+        print(len(json.load(f).get('mcpServers', {})))
+except:
+    print(0)
+" 2>/dev/null || echo "0")
+    fi
+
+    if (( mcp_count > 0 )); then
+        echo "◆ ${mcp_count}mcp"
+    else
+        echo "◆"
+    fi
+fi
